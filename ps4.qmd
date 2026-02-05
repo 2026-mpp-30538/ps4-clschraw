@@ -1,0 +1,456 @@
+---
+title: "PS4"
+author: "Charlie Schraw"
+date: "2/3/2026"
+format: 
+  pdf:
+    include-in-header: 
+       text: |
+         \usepackage{fvextra}
+         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+include-before-body:
+  text: |
+    \RecustomVerbatimEnvironment{verbatim}{Verbatim}{
+      showspaces = false,
+      showtabs = false,
+      breaksymbolleft={},
+      breaklines
+    }
+output:
+  echo: false
+  eval: false
+---
+
+**Due 02/07 at 5:00PM Central.**
+
+"This submission is my work alone and complies with the 30538 integrity policy." Add your initials to indicate your agreement: CS
+
+### Github Classroom Assignment Setup and Submission Instructions
+
+1.  **Accepting and Setting up the PS4 Assignment Repository**
+    -   Each student must individually accept the repository for the problem set from Github Classroom ("ps4") -- <https://classroom.github.com/a/hWhtcHqH>
+        -   You will be prompted to select your cnetid from the list in order to link your Github account to your cnetid.
+        -   If you can't find your cnetid in the link above, click "continue to next step" and accept the assignment, then add your name, cnetid, and Github account to this Google Sheet and we will manually link it: <https://rb.gy/9u7fb6>
+    -   If you authenticated and linked your Github account to your device, you should be able to clone your PS4 assignment repository locally.
+    -   Contents of PS4 assignment repository:
+        -   `ps4_template.qmd`: this is the Quarto file with the template for the problem set. You will write your answers to the problem set here.
+2.  **Submission Process**:
+    -   Knit your completed solution `ps4.qmd` as a pdf `ps4.pdf`.
+        -   Your submission does not need runnable code. Instead, you will tell us either what code you ran or what output you got.
+    -   To submit, push `ps4.qmd` and `ps4.pdf` to your PS4 assignment repository. Confirm on Github.com that your work was successfully pushed.
+
+### Grading
+- You will be graded on what was last pushed to your PS4 assignment repository before the assignment deadline
+- Problem sets will be graded for completion as: {missing (0%); ✓- (incomplete, 50%); ✓+ (excellent, 100%)}
+    - The percent values assigned to each problem denote how long we estimate the problem will take as a share of total time spent on the problem set, not the points they are associated with.
+- In order for your submission to be considered complete, you need to push both your `ps4.qmd` and `ps4.pdf` to your repository. Submissions that do not include both files will automatically receive 50% credit.
+
+
+\newpage
+
+```{python}
+import pandas as pd
+import altair as alt
+import time
+from bs4 import BeautifulSoup
+import requests
+from urllib.parse import urljoin
+from datetime import datetime
+
+import warnings 
+warnings.filterwarnings('ignore')
+alt.renderers.enable("png")
+```
+
+## Step 1: Develop initial scraper and crawler
+
+
+```{python}
+with open(r'C:\Users\Owner\Documents\Data_Vis\ps4-clschraw\hhs.htm', 'r', encoding='utf-8') as file:
+    html_content = file.read()
+
+soup = BeautifulSoup(html_content, 'html.parser')
+card_group = soup.find('ul', class_='usa-card-group')
+cards = card_group.find_all('li', class_='usa-card') if card_group else []
+
+enforcement_actions = []
+
+for card in cards:
+    header = card.find('header', class_='usa-card__header')
+    
+    if header:
+        heading = header.find('h2', class_='usa-card__heading')
+        
+        if heading:
+            link_tag = heading.find('a')
+            if link_tag:
+                href = link_tag.get('href')
+                # Add base URL to make full link
+                full_link = f"https://oig.hhs.gov{href}"
+                title = link_tag.get_text(strip=True)
+                
+                date_span = header.find('span', class_='text-base-dark')
+                date = date_span.get_text(strip=True) if date_span else None
+                
+                tag_elements = header.find_all('li', class_='usa-tag')
+                tags = [tag.get_text(strip=True) for tag in tag_elements]
+                tags_str = ', '.join(tags) if tags else None
+                
+                enforcement_actions.append({
+                    'title': title,
+                    'link': full_link,
+                    'date': date,
+                    'tags': tags_str
+                })
+
+# Create DataFrame
+df = pd.DataFrame(enforcement_actions)
+df.head()
+```
+
+## Step 2: Making the scraper dynamic
+
+### 1. Turning the scraper into a function 
+
+* a. Pseudo-Code
+
+FUNCTION scrape_enforcement_actions(year, month, run_scraper=False):
+    
+    # Step 1: Input validation
+    IF year < 2013:
+        PRINT "Error: Please use year >= 2013"
+        RETURN
+    
+    # Step 2: Check if we should run
+    IF run_scraper == False:
+        PRINT "Scraper is disabled. Set run_scraper=True to execute."
+        RETURN
+    
+    # Step 3: Calculate date range
+    start_date = create date from (year, month, 1)
+    end_date = today's date
+    
+    # Step 4: Initialize collection
+    all_enforcement_actions = empty list
+    page_number = 1
+    base_url = "https://oig.hhs.gov/fraud/enforcement/"
+    
+    # Step 5: Loop through pages until no more results
+    WHILE True:
+        # Build URL with filters for date and page number
+        url = base_url + "?date_from=YYYY-MM-DD&page=" + page_number
+        
+        # Fetch the page HTML
+        response = GET request to url
+        
+        IF response fails:
+            PRINT "Error fetching page"
+            BREAK
+        
+        # Parse HTML
+        soup = parse HTML from response
+        
+        # Find card group
+        card_group = find ul with class 'usa-card-group'
+        
+        IF card_group is None OR card_group has no cards:
+            PRINT "No more results found"
+            BREAK  # Exit the while loop - no more pages
+        
+        # Extract cards from this page
+        cards = find all li with class 'usa-card' in card_group
+        
+        IF cards is empty:
+            BREAK  # No cards found, we're done
+        
+        # Step 6: Extract data from each card
+        FOR each card in cards:
+            header = find header in card
+            IF header exists:
+                heading = find h2 in header
+                IF heading exists:
+                    link_tag = find a tag in heading
+                    IF link_tag exists:
+                        href = get href attribute
+                        full_link = base_url + href
+                        title = get text from link_tag
+                        
+                        date_span = find span with date
+                        date = get text from date_span
+                        
+                        # Check if date is within our range
+                        IF date >= start_date AND date <= end_date:
+                            tag_elements = find all li tags
+                            tags = extract text from tags
+                            
+                            ADD {title, link, date, tags} to all_enforcement_actions
+                        ELSE IF date < start_date:
+                            # We've gone past our date range, stop completely
+                            SET flag to exit outer loop
+                            BREAK from card loop
+        
+        # Step 7: Check if we should continue to next page
+        IF we hit a date before start_date:
+            BREAK  # Stop pagination
+        
+        # Step 8: Increment page and wait
+        page_number = page_number + 1
+        SLEEP for 1 second  # Be polite to the server
+    
+    # Step 9: Convert to DataFrame and save
+    df = create DataFrame from all_enforcement_actions
+    filename = f"enforcement_actions_{year}_{month}.csv"
+    SAVE df to filename
+    
+    PRINT f"Scraped {len(df)} enforcement actions"
+    PRINT f"Saved to {filename}"
+    
+    RETURN df
+
+* b. Create Dynamic Scraper
+
+```{python}
+def scrape_enforcement_actions(year, month, run_scraper=False):
+    # Step 1: Input validation
+    if year < 2013:
+        print("Error: Please use year >= 2013. Only enforcement actions after 2013 are listed.")
+        return None
+    
+    # Step 2: Check if we should run
+    if not run_scraper:
+        print("Scraper is disabled. Set run_scraper=True to execute.")
+        return None
+    
+    # Step 3: Set up date range
+    start_date = datetime(year, month, 1)
+    end_date = datetime.now()
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    
+    print(f"Scraping enforcement actions from {start_date_str} to today...")
+    
+    # Step 4: Initialize collection
+    all_enforcement_actions = []
+    page_number = 1
+    base_url = "https://oig.hhs.gov"
+    search_url = f"{base_url}/fraud/enforcement/"
+    earliest_date = None  # Track the earliest date we encounter
+    
+    # Step 5: Loop through pages
+    while True:
+        # Build URL with date filter and pagination
+        params_url = f"{search_url}?date_from={start_date_str}&page={page_number}"
+        
+        print(f"Fetching page {page_number}...")
+        
+        try:
+            # Fetch the page
+            response = requests.get(params_url)
+            response.raise_for_status()  # Raise error for bad status codes
+            
+        except requests.RequestException as e:
+            print(f"Error fetching page {page_number}: {e}")
+            break
+        
+        # Parse HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Find card group
+        card_group = soup.find('ul', class_='usa-card-group')
+        
+        if not card_group:
+            print(f"No card group found on page {page_number}. Stopping.")
+            break
+        
+        # Extract cards from this page
+        cards = card_group.find_all('li', class_='usa-card')
+        
+        if not cards:
+            print(f"No cards found on page {page_number}. Stopping.")
+            break
+        
+        print(f"Found {len(cards)} cards on page {page_number}")
+        
+        # Flag to track if we've gone past our date range
+        past_date_range = False
+        
+        # Step 6: Extract data from each card
+        for card in cards:
+            header = card.find('header', class_='usa-card__header')
+            
+            if header:
+                heading = header.find('h2', class_='usa-card__heading')
+                
+                if heading:
+                    link_tag = heading.find('a')
+                    if link_tag:
+                        href = link_tag.get('href')
+                        full_link = f"{base_url}{href}"
+                        title = link_tag.get_text(strip=True)
+                        
+                        # Get date
+                        date_span = header.find('span', class_='text-base-dark')
+                        date_str = date_span.get_text(strip=True) if date_span else None
+                        
+                        if date_str:
+                            try:
+                                # Parse date (format: "February 3, 2026")
+                                card_date = datetime.strptime(date_str, '%B %d, %Y')
+                                
+                                # Update earliest date
+                                if earliest_date is None or card_date < earliest_date:
+                                    earliest_date = card_date
+                                
+                                # Check if date is within our range
+                                if card_date >= start_date and card_date <= end_date:
+                                    # Get tags
+                                    tag_elements = header.find_all('li', class_='usa-tag')
+                                    tags = [tag.get_text(strip=True) for tag in tag_elements]
+                                    tags_str = ', '.join(tags) if tags else None
+                                    
+                                    # Add to collection
+                                    all_enforcement_actions.append({
+                                        'title': title,
+                                        'link': full_link,
+                                        'date': date_str,
+                                        'tags': tags_str
+                                    })
+                                
+                                elif card_date < start_date:
+                                    # We've gone past our date range
+                                    past_date_range = True
+                                    break
+                            
+                            except ValueError:
+                                # If date parsing fails, skip this card
+                                print(f"Could not parse date: {date_str}")
+                                continue
+        
+        # Step 7: Check if we should continue to next page
+        if past_date_range:
+            break
+        
+        # Step 8: Increment page and wait
+        page_number += 1
+        time.sleep(1)  # Be polite to the server
+    
+    # Step 9: Convert to DataFrame and save
+    if not all_enforcement_actions:
+        print("No enforcement actions found in the specified date range.")
+        return None
+    
+    df = pd.DataFrame(all_enforcement_actions)
+    filename = f"enforcement_actions_{year}_{month}.csv"
+    df.to_csv(filename, index=False)
+    
+    print(f"\nScraped {len(df)} enforcement actions")
+    if earliest_date:
+        print(f"Earliest date encountered: {earliest_date.strftime('%B %d, %Y')}")
+    print(f"Saved to {filename}")
+    
+    return df
+```
+
+```{python}
+df = scrape_enforcement_actions(2024, 1, run_scraper=True)
+```
+
+It took 1770 enforcement actions and the earliest date it encountered was December 22, 2023, but it did not account for it.
+
+* c. Test Your Code
+
+Enforcements since January 2022
+```{python}
+df = scrape_enforcement_actions(2022, 1, run_scraper=True)
+```
+
+It took 3360 enforcement actions and the earliest date it encountered was December 30, 2021, but it did not account for it.
+
+## Step 3: Plot data based on scraped data
+
+### 1. Plot the number of enforcement actions over time
+
+```{python}
+df = pd.read_csv(r'C:\Users\Owner\Documents\Data_Vis\ps4-clschraw\enforcement_actions_2022_1.csv')
+df['date'] = pd.to_datetime(df['date'])
+df = df[df['date'] >= '2022-01-01']
+df['month'] = df['date'].dt.to_period('M').dt.to_timestamp()
+
+monthly = df.groupby('month').size().reset_index(name='count')
+
+chart = alt.Chart(monthly).mark_line().encode(
+    x=alt.X('month:T'), 
+    y=alt.Y('count:Q')
+)
+chart.show()
+```
+
+### 2. Plot the number of enforcement actions categorized:
+
+* based on "Criminal and Civil Actions" vs. "State Enforcement Agencies"
+
+```{python}
+def classify_main_category(tags):
+    tags = str(tags).lower()
+    if 'state enforcement agencies' in tags:
+        return 'State Enforcement Agencies'
+    elif 'criminal and civil actions' in tags:
+        return 'Criminal and Civil Actions'
+    return 'Other'
+
+df['main_category'] = df['tags'].apply(classify_main_category)
+
+monthly_main = df.groupby(['month', 'main_category']).size().reset_index(name='count')
+
+chart = alt.Chart(monthly_main).mark_line().encode(
+    x=alt.X('month:T'),
+    y=alt.Y('count:Q'),
+    color=alt.Color('main_category:N')
+)
+
+chart.show()
+```
+
+* based on five topics
+
+```{python}
+df['title_lower'] = df['title'].str.lower()
+
+# Filter for Criminal and Civil Actions only
+df = df[df['tags'].str.contains('Criminal and Civil Actions', na=False)]
+
+# Classify into subtopics
+def classify_subtopic(title):
+    # Health Care Fraud
+    if any(word in title for word in ['health care', 'healthcare', 'medical', 'medicare', 'medicaid', 'hospital', 'doctor', 'physician', 'clinic', 'patient']):
+        return 'Health Care Fraud'
+    
+    # Drug Enforcement
+    elif any(word in title for word in ['drug', 'opioid', 'fentanyl', 'controlled substance', 'prescription', 'pharmacy', 'narcotics']):
+        return 'Drug Enforcement'
+    
+    # Bribery/Corruption
+    elif any(word in title for word in ['bribery', 'bribe', 'corruption', 'kickback', 'extortion']):
+        return 'Bribery/Corruption'
+    
+    # Financial Fraud
+    elif any(word in title for word in ['bank', 'financial', 'securities', 'wire fraud', 'money laundering', 'fraud scheme', 'investment', 'loan', 'mortgage', 'tax', 'embezzle']):
+        return 'Financial Fraud'
+    
+    # Other
+    else:
+        return 'Other'
+
+df['subtopic'] = df['title_lower'].apply(classify_subtopic)
+
+# Aggregate by month and subtopic
+monthly_subtopic = df.groupby(['month', 'subtopic']).size().reset_index(name='count')
+
+# Create chart
+chart = alt.Chart(monthly_subtopic).mark_line().encode(
+    x=alt.X('month:T'),
+    y=alt.Y('count:Q'),
+    color=alt.Color('subtopic:N')
+)
+
+chart.show()
+```
